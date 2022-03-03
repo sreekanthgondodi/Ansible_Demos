@@ -1,0 +1,116 @@
+# ************************************************** Scenario: Ansible Setup Httpd and PHP *********************************************************
+
+# Nautilus Application development team wants to test an Apache and PHP setup on one of the app servers in Stratos Datacenter. They want the DevOps team to prepare an Ansible playbook to accomplish this task. Below you can find more details about the task.
+
+
+# There is an inventory file ~/playbooks/inventory on jump host.
+
+# Create a playbook ~/playbooks/httpd.yml on jump host and perform the following tasks on App Server 3.
+
+# a. Install httpd and php packages (whatever default version is available in yum repo).
+
+# b. Change default document root of Apache to /var/www/html/myroot in default Apache config /etc/httpd/conf/httpd.conf. Make sure /var/www/html/myroot path exists (if not please create the same).
+
+# c. There is a template ~/playbooks/templates/phpinfo.php.j2 on jump host. Copy this template to the Apache document root you created as phpinfo.php file and make sure user owner and the group owner for this file is apache user.
+
+# d. Start and enable httpd service.
+
+# Note: Validation will try to run playbook using command ansible-playbook -i inventory httpd.yml, so please make sure playbook works this way without passing any extra arguments.
+
+# ------------------------------------------------------------------------------------------------------------------------------------------
+# Solution:
+
+# 1. create httpd playbook
+
+# vi /home/thor/ansible/httpd.yml
+
+- name: copy playbook
+  hosts: stapp03
+  become: true
+  tasks:
+   - name: Install httpd and php packages
+     package:
+	  name:
+	   - httpd
+	   - php
+	 state: latest
+	 
+   - name: Replace default document root in httpd.conf
+     replace:
+      path: /etc/httpd/conf/httpd.conf
+      regexp: DocumentRoot \"\/var\/www\/html\"
+      replace: DocumentRoot "/var/www/html/myroot"	  
+	 
+   - name: create document root if does not exists
+     file:
+	  state: directory
+	  path: /var/www/html/myroot
+	  owner: apache
+	  group: apache
+	  
+   - name: copy template file
+     template:
+	  src: /home/thor/playbooks/templates/phpinfo.php.j2
+	  dest: /var/www/html/myroot/phpinfo.php
+	  group: apache
+	  owner: apache
+
+   - name: start services
+     service:
+	  name: httpd
+	  state: started
+	  enabled: yes
+	  
+# 	                                                        (OR)
+														
+# create a playbook:
+# ----------------
+### Change default document root 
+
+# vi   httpd.yml
+
+- name: Httpd and PHP Playbook
+  hosts: stapp03
+  become: yes
+  become_user: root
+  tasks:
+  - name: install httpd package
+    yum: name=httpd
+  - name: install php package
+    yum: name=php   
+  - name: install  mod_php package
+    yum: name=php  
+  - name: Creates directory /var/www/html/myroot
+    file:
+      path: /var/www/html/myroot
+      state: directory 
+  - name: Comment DocumentRoot line in httpd.conf
+    lineinfile:
+      path: /etc/httpd/conf/httpd.conf
+      regexp: '^DocumentRoot'
+      line: '#DocumentRoot'
+  - name: Replace default DocumentRoot to  /var/www/html/myroot
+    lineinfile:
+      path: /etc/httpd/conf/httpd.conf
+      regexp: '^DocumentRoot'
+      insertafter: '^#DocumentRoot '
+      line: 'DocumentRoot /var/www/html/myroot'
+  - name: copy phpinfo.php.j2 to /var/www/html/myroot/phpinfo.php
+    template:
+      src: ~/playbooks/templates/phpinfo.php.j2
+      dest: /var/www/html/myroot/phpinfo.php
+      owner: apache
+      group: apache
+  - name: ensure apache is started &  enabled
+    command: systemctl enable  --now  httpd.service														
+	                                                    
+
+# 2. Run the playbook
+# ansible-playbook -i inventory httpd.yml --syntax-check
+# ansible-playbook -i inventory httpd.yml --check
+# ansible-playbook -i inventory httpd.yml
+
+# 3. Test changes
+
+# curl http://stapp03:8080/phpinfo.php
+
